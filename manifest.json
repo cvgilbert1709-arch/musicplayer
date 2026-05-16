@@ -1,0 +1,33 @@
+<<<<<<< HEAD
+{
+  "short_name": "音樂盒",
+  "name": "離線音樂播放器",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "start_url": "index.html",
+  "background_color": "#ffffff",
+  "theme_color": "#000000",
+  "display": "standalone"
+}
+=======
+{
+  "short_name": "音樂盒",
+  "name": "離線音樂播放器",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "start_url": "index.html",
+  "background_color": "#ffffff",
+  "theme_color": "#000000",
+  "display": "standalone"
+}
+>>>>>>> 6757a58cd9e7bccfed04027a4d22d1a43feb4825

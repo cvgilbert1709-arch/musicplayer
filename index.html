@@ -1,0 +1,522 @@
+<<<<<<< HEAD
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>離線音樂播放器</title>
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="音樂盒">
+    <link rel="apple-touch-icon" href="icon.png">
+
+    <link rel="manifest" href="manifest.json">
+
+    <style>
+        :root {
+            --safe-top: env(safe-area-inset-top, 20px);
+            --safe-bottom: env(safe-area-inset-bottom, 20px);
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0;
+            padding: calc(var(--safe-top) + 20px) 20px calc(var(--safe-bottom) + 20px) 20px;
+            background-color: #121212;
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - calc(var(--safe-top) + var(--safe-bottom) + 40px));
+        }
+        h1 { font-size: 24px; margin-bottom: 20px; text-align: center; }
+        #player-container {
+            background: #1e1e1e;
+            padding: 20px;
+            border-radius: 16px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        #now-playing { font-size: 16px; color: #a0a0a0; margin-bottom: 15px; }
+        
+        #controls-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .mode-btn {
+            background: #2a2a2a;
+            color: #fff;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .mode-btn.active {
+            background: #007aff;
+        }
+
+        audio { width: 100%; margin-top: 10px; }
+        #playlist {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            overflow-y: auto;
+            flex-grow: 1;
+        }
+        li {
+            padding: 15px;
+            background: #2a2a2a;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        li:active { background: #3a3a3a; }
+        li.active { background: #007aff; color: white; font-weight: bold; }
+        
+        .status-badge {
+            font-size: 12px;
+            padding: 2px 6px;
+            border-radius: 10px;
+            background: #3a3a3a;
+            color: #aaa;
+        }
+        li.active .status-badge {
+            background: rgba(255,255,255,0.2);
+            color: #fff;
+        }
+        .downloaded {
+            color: #4cd964 !important;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>我的離線音樂盒</h1>
+
+    <div id="player-container">
+        <div id="controls-row">
+            <div id="now-playing">未在播放</div>
+            <button id="mode-toggle" class="mode-btn" onclick="togglePlayMode()">🔁 順序播放</button>
+        </div>
+        <audio id="player" controls preload="auto"></audio>
+    </div>
+
+    <ul id="playlist"></ul>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js')
+                .then(() => console.log('Service Worker 註冊成功'))
+                .catch(err => console.log('Service Worker 註冊失敗:', err));
+        }
+
+        let songs = []; 
+        let currentTrackIndex = 0;
+        let playMode = 'sequence'; 
+        
+        const player = document.getElementById('player');
+        const playlistElem = document.getElementById('playlist');
+        const nowPlayingElem = document.getElementById('now-playing');
+        const modeToggleBtn = document.getElementById('mode-toggle');
+
+        fetch('playlist.json')
+            .then(res => res.json())
+            .then(data => {
+                songs = data;
+                initPlaylist();
+            })
+            .catch(err => {
+                nowPlayingElem.textContent = "無法載入歌單";
+                console.error(err);
+            });
+
+        // 🧠【核心修正】：將相對路徑比對升級為絕對網址比對
+        async function initPlaylist() {
+            playlistElem.innerHTML = '';
+            
+            // 開啟 Service Worker 的快取資料庫 (與 sw.js 裡的版本號一致)
+            const cache = await caches.open('music-player-v2');
+
+            for (let index = 0; index < songs.length; index++) {
+                const song = songs[index];
+                const li = document.createElement('li');
+                li.dataset.index = index;
+                
+                const textSpan = document.createElement('span');
+                textSpan.textContent = `${song.title} - ${song.artist}`;
+                li.appendChild(textSpan);
+
+                const statusSpan = document.createElement('span');
+                statusSpan.classList.add('status-badge');
+                
+                // 💡【核心修改位置】：將 "song/xxx.mp3" 轉換成具備域名的完整 URL 物件
+                // 這樣不論是在本地測試還是 GitHub Pages 上，網址格式都能完美對齊
+                const absoluteUrl = new URL(song.file, window.location.href).href;
+                
+                // 使用完整網址去快取資料庫中尋找
+                const cachedResponse = await cache.match(absoluteUrl);
+                if (cachedResponse) {
+                    statusSpan.textContent = '🟢 已下載';
+                    statusSpan.classList.add('downloaded');
+                } else {
+                    statusSpan.textContent = '⏳ 未下載';
+                }
+                li.appendChild(statusSpan);
+
+                li.onclick = () => playTrack(index);
+                playlistElem.appendChild(li);
+            }
+        }
+
+        function togglePlayMode() {
+            if (playMode === 'sequence') {
+                playMode = 'random';
+                modeToggleBtn.textContent = '🔀 隨機播放';
+                modeToggleBtn.classList.add('active');
+            } else {
+                playMode = 'sequence';
+                modeToggleBtn.textContent = '🔁 順序播放';
+                modeToggleBtn.classList.remove('active');
+            }
+        }
+
+        function playTrack(index) {
+            if (index < 0 || index >= songs.length) return;
+            currentTrackIndex = index;
+            const song = songs[currentTrackIndex];
+
+            player.src = song.file;
+            player.play().catch(err => console.log("等待手動播放:", err));
+
+            nowPlayingElem.textContent = `正在播放: ${song.title}`;
+            
+            document.querySelectorAll('#playlist li').forEach((li, idx) => {
+                if (idx === index) li.classList.add('active');
+                else li.classList.remove('active');
+            });
+
+            updateMediaSession(song);
+        }
+
+        player.addEventListener('playing', () => {
+            // 當歌曲順利播放 2 秒後，重新掃描快取並更新 UI 的下載標籤
+            setTimeout(() => {
+                initPlaylist(); 
+            }, 2000);
+        });
+
+        function updateMediaSession(song) {
+            if ('mediaSession' in navigator) {
+                navigator.mediaSession.metadata = new MediaMetadata({
+                    title: song.title,
+                    artist: song.artist,
+                    album: '本地離線播放清單',
+                    artwork: [{ src: 'icon.png', sizes: '512x512', type: 'image/png' }]
+                });
+
+                navigator.mediaSession.setActionHandler('play', () => player.play());
+                navigator.mediaSession.setActionHandler('pause', () => player.pause());
+                navigator.mediaSession.setActionHandler('previoustrack', () => handleNextOrPrev('prev'));
+                navigator.mediaSession.setActionHandler('nexttrack', () => handleNextOrPrev('next'));
+            }
+        }
+
+        function handleNextOrPrev(direction) {
+            if (playMode === 'random') {
+                const randomIndex = Math.floor(Math.random() * songs.length);
+                playTrack(randomIndex);
+            } else {
+                if (direction === 'next') {
+                    if (currentTrackIndex + 1 < songs.length) {
+                        playTrack(currentTrackIndex + 1);
+                    } else {
+                        playTrack(0);
+                    }
+                } else {
+                    if (currentTrackIndex - 1 >= 0) {
+                        playTrack(currentTrackIndex - 1);
+                    } else {
+                        playTrack(songs.length - 1);
+                    }
+                }
+            }
+        }
+
+        player.addEventListener('ended', () => {
+            handleNextOrPrev('next');
+        });
+    </script>
+</body>
+</html>
+=======
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>離線音樂播放器</title>
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="音樂盒">
+    <link rel="apple-touch-icon" href="icon.png">
+
+    <link rel="manifest" href="manifest.json">
+
+    <style>
+        :root {
+            --safe-top: env(safe-area-inset-top, 20px);
+            --safe-bottom: env(safe-area-inset-bottom, 20px);
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0;
+            padding: calc(var(--safe-top) + 20px) 20px calc(var(--safe-bottom) + 20px) 20px;
+            background-color: #121212;
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - calc(var(--safe-top) + var(--safe-bottom) + 40px));
+        }
+        h1 { font-size: 24px; margin-bottom: 20px; text-align: center; }
+        #player-container {
+            background: #1e1e1e;
+            padding: 20px;
+            border-radius: 16px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        #now-playing { font-size: 16px; color: #a0a0a0; margin-bottom: 15px; }
+        
+        /* 播放模式按鈕樣式 */
+        #controls-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .mode-btn {
+            background: #2a2a2a;
+            color: #fff;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .mode-btn.active {
+            background: #007aff;
+        }
+
+        audio { width: 100%; margin-top: 10px; }
+        #playlist {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            overflow-y: auto;
+            flex-grow: 1;
+        }
+        li {
+            padding: 15px;
+            background: #2a2a2a;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        li:active { background: #3a3a3a; }
+        li.active { background: #007aff; color: white; font-weight: bold; }
+        
+        /* 下載狀態標籤樣式 */
+        .status-badge {
+            font-size: 12px;
+            padding: 2px 6px;
+            border-radius: 10px;
+            background: #3a3a3a;
+            color: #aaa;
+        }
+        li.active .status-badge {
+            background: rgba(255,255,255,0.2);
+            color: #fff;
+        }
+        .downloaded {
+            color: #4cd964 !important; /* iOS 綠色 */
+        }
+    </style>
+</head>
+<body>
+
+    <h1>我的離線音樂盒</h1>
+
+    <div id="player-container">
+        <div id="controls-row">
+            <div id="now-playing">未在播放</div>
+            <!-- 功能 2：播放模式切換按鈕 -->
+            <button id="mode-toggle" class="mode-btn" onclick="togglePlayMode()">🔁 順序播放</button>
+        </div>
+        <audio id="player" controls preload="auto"></audio>
+    </div>
+
+    <ul id="playlist"></ul>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js')
+                .then(() => console.log('Service Worker 註冊成功'))
+                .catch(err => console.log('Service Worker 註冊失敗:', err));
+        }
+
+        let songs = []; 
+        let currentTrackIndex = 0;
+        let playMode = 'sequence'; // 'sequence' (順序) 或 'random' (隨機)
+        
+        const player = document.getElementById('player');
+        const playlistElem = document.getElementById('playlist');
+        const nowPlayingElem = document.getElementById('now-playing');
+        const modeToggleBtn = document.getElementById('mode-toggle');
+
+        // 從 JSON 檔案動態載入歌單
+        fetch('playlist.json')
+            .then(res => res.json())
+            .then(data => {
+                songs = data;
+                initPlaylist();
+            })
+            .catch(err => {
+                nowPlayingElem.textContent = "無法載入歌單";
+                console.error(err);
+            });
+
+        // 初始化並渲染播放清單
+        async function initPlaylist() {
+            playlistElem.innerHTML = '';
+            
+            // 獲取當前快取快照，用來檢查下載狀態
+            const cache = await caches.open('music-player-v2');
+
+            for (let index = 0; index < songs.length; index++) {
+                const song = songs[index];
+                const li = document.createElement('li');
+                li.dataset.index = index;
+                
+                // 歌名與歌手文字
+                const textSpan = document.createElement('span');
+                textSpan.textContent = `${song.title} - ${song.artist}`;
+                li.appendChild(textSpan);
+
+                // 功能 1：檢查該音樂檔案是否已經下載到本地快取
+                const statusSpan = document.createElement('span');
+                statusSpan.classList.add('status-badge');
+                
+                // 根據 MP3 的相對路徑去快取資料庫比對
+                const cachedResponse = await cache.match(song.file);
+                if (cachedResponse) {
+                    statusSpan.textContent = '🟢 已下載';
+                    statusSpan.classList.add('downloaded');
+                } else {
+                    statusSpan.textContent = '⏳ 未下載';
+                }
+                li.appendChild(statusSpan);
+
+                li.onclick = () => playTrack(index);
+                playlistElem.appendChild(li);
+            }
+        }
+
+        // 切換播放模式（順序 / 隨機）
+        function togglePlayMode() {
+            if (playMode === 'sequence') {
+                playMode = 'random';
+                modeToggleBtn.textContent = '🔀 隨機播放';
+                modeToggleBtn.classList.add('active');
+            } else {
+                playMode = 'sequence';
+                modeToggleBtn.textContent = '🔁 順序播放';
+                modeToggleBtn.classList.remove('active');
+            }
+        }
+
+        function playTrack(index) {
+            if (index < 0 || index >= songs.length) return;
+            currentTrackIndex = index;
+            const song = songs[currentTrackIndex];
+
+            player.src = song.file;
+            player.play().catch(err => console.log("等待手動播放:", err));
+
+            nowPlayingElem.textContent = `正在播放: ${song.title}`;
+            
+            // 更新清單高亮狀態
+            document.querySelectorAll('#playlist li').forEach((li, idx) => {
+                if (idx === index) li.classList.add('active');
+                else li.classList.remove('active');
+            });
+
+            updateMediaSession(song);
+        }
+
+        // 當歌曲播放時，監聽並即時更新「已下載」的狀態標籤
+        player.addEventListener('playing', () => {
+            // 音樂開始放了，代表 Service Worker 已經在背後抓完檔案並寫入快取，2秒後刷新清單狀態
+            setTimeout(() => {
+                initPlaylist(); 
+            }, 2000);
+        });
+
+        function updateMediaSession(song) {
+            if ('mediaSession' in navigator) {
+                navigator.mediaSession.metadata = new MediaMetadata({
+                    title: song.title,
+                    artist: song.artist,
+                    album: '本地離線播放清單',
+                    artwork: [{ src: 'icon.png', sizes: '512x512', type: 'image/png' }]
+                });
+
+                navigator.mediaSession.setActionHandler('play', () => player.play());
+                navigator.mediaSession.setActionHandler('pause', () => player.pause());
+                navigator.mediaSession.setActionHandler('previoustrack', () => handleNextOrPrev('prev'));
+                navigator.mediaSession.setActionHandler('nexttrack', () => handleNextOrPrev('next'));
+            }
+        }
+
+        // 統一處理下一首/上一首的邏輯（融合隨機與順序模式）
+        function handleNextOrPrev(direction) {
+            if (playMode === 'random') {
+                // 隨機模式：隨機挑選清單中的任意一首
+                const randomIndex = Math.floor(Math.random() * songs.length);
+                playTrack(randomIndex);
+            } else {
+                // 順序模式
+                if (direction === 'next') {
+                    if (currentTrackIndex + 1 < songs.length) {
+                        playTrack(currentTrackIndex + 1);
+                    } else {
+                        playTrack(0); // 播完回到第一首
+                    }
+                } else {
+                    if (currentTrackIndex - 1 >= 0) {
+                        playTrack(currentTrackIndex - 1);
+                    } else {
+                        playTrack(songs.length - 1); // 退回到最後一首
+                    }
+                }
+            }
+        }
+
+        // 當目前歌曲播放完畢，自動觸發下一首
+        player.addEventListener('ended', () => {
+            handleNextOrPrev('next');
+        });
+    </script>
+</body>
+</html>
+>>>>>>> 6757a58cd9e7bccfed04027a4d22d1a43feb4825
