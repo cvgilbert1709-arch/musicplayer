@@ -2,7 +2,6 @@
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <!-- box-sizing: border-pack 確保內邊距不撐開寬度，viewport-fit=cover 允許填滿瀏海屏 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>離線音樂播放器</title>
     
@@ -14,32 +13,28 @@
     <link rel="manifest" href="manifest.json">
 
     <style>
-        /* 現代 iOS 暗黑模式風格 */
         :root {
-            /* 自動獲取 iOS 安全區域（避免遮擋瀏海屏與底部手勢條） */
             --safe-top: env(safe-area-inset-top, 44px);
             --safe-bottom: env(safe-area-inset-bottom, 34px);
         }
         
         * {
             box-sizing: border-box;
-            -webkit-tap-highlight-color: transparent; /* 移除 iOS 點擊時的藍色高亮 */
+            -webkit-tap-highlight-color: transparent;
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
             margin: 0;
             padding: 0;
-            background-color: #000000; /* 使用純黑底色，完美隱藏瀏海屏 */
+            background-color: #000000;
             color: #ffffff;
             display: flex;
             flex-direction: column;
-            /* 100vh 在 iOS 上會有工具列高度計算錯誤的問題，這裡用標準高度填滿 */
             height: 100vh; 
-            overflow: hidden; /* 防止整個網頁產生全域上下震動的橡皮筋效果 */
+            overflow: hidden;
         }
 
-        /* 頂部導航欄（避開瀏海屏） */
         header {
             padding-top: var(--safe-top);
             padding-left: 20px;
@@ -56,7 +51,6 @@
             letter-spacing: 0.5px;
         }
 
-        /* 播放器主控制面板（固定在上方） */
         #player-container {
             background: linear-gradient(180deg, #121212 0%, #1c1c1e 100%);
             padding: 20px;
@@ -76,14 +70,13 @@
         #now-playing {
             font-size: 15px;
             font-weight: 500;
-            color: #ff2d55; /* iOS Apple Music 經典桃紅色 */
+            color: #ff2d55;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
             max-width: 65%;
         }
         
-        /* 播放模式按鈕 */
         .mode-btn {
             background: #2c2c2e;
             color: #ffffff;
@@ -99,19 +92,17 @@
             background: #ff2d55;
         }
 
-        /* iOS 原生 HTML5 播放器介面優化 */
         audio {
             width: 100%;
             height: 40px;
             border-radius: 8px;
         }
 
-        /* 歌單滾動區域（智慧型填充剩餘螢幕空間） */
         #playlist-container {
             flex-grow: 1;
-            overflow-y: auto; /* 只有歌單區域可以上下捲動 */
-            -webkit-overflow-scrolling: touch; /* 啟用 iOS 絲滑滾動效果 */
-            padding: 15px 20px calc(var(--safe-bottom) + 15px) 20px; /* 底部留空避開 iOS 黑條 */
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            padding: 15px 20px calc(var(--safe-bottom) + 15px) 20px;
         }
 
         #playlist {
@@ -120,7 +111,6 @@
             margin: 0;
         }
         
-        /* 歌單單一曲目項目 */
         li {
             padding: 16px;
             background: #1c1c1e;
@@ -133,10 +123,9 @@
             transition: background 0.2s ease;
         }
         li:active {
-            background: #2c2c2e; /* 點擊時的灰化反饋 */
+            background: #2c2c2e;
         }
         
-        /* 當前播放中的歌曲高亮 */
         li.active {
             background: rgba(255, 45, 85, 0.15);
             border: 1px solid rgba(255, 45, 85, 0.4);
@@ -155,7 +144,6 @@
             max-width: 75%;
         }
         
-        /* 下載狀態標籤 */
         .status-badge {
             font-size: 11px;
             font-weight: 600;
@@ -165,19 +153,17 @@
             color: #8e8e93;
         }
         .downloaded {
-            background: rgba(52, 199, 89, 0.15); /* iOS 綠色透明底 */
-            color: #34c759 !important; /* iOS 綠色字 */
+            background: rgba(52, 199, 89, 0.15);
+            color: #34c759 !important;
         }
     </style>
 </head>
 <body>
 
-    <!-- 頂部標題（已安全避開動態島） -->
     <header>
         <h1>我的離線音樂盒</h1>
     </header>
 
-    <!-- 核心播放控制器（固定在上方，不隨歌單滾動） -->
     <div id="player-container">
         <div id="controls-row">
             <div id="now-playing">準備就緒</div>
@@ -186,7 +172,6 @@
         <audio id="player" controls preload="auto"></audio>
     </div>
 
-    <!-- 可獨立滾動的歌單區域 -->
     <div id="playlist-container">
         <ul id="playlist"></ul>
     </div>
@@ -218,9 +203,12 @@
                 console.error(err);
             });
 
+        // 🧠【智慧化下載偵測】：遍歷手機內所有快取庫，100% 解決名稱打架問題
         async function initPlaylist() {
             playlistElem.innerHTML = '';
-            const cache = await caches.open('music-player-v2');
+            
+            // 取得目前手機裡存在的所有快取資料庫名稱
+            const cacheNames = await caches.keys();
 
             for (let index = 0; index < songs.length; index++) {
                 const song = songs[index];
@@ -234,9 +222,23 @@
                 const statusSpan = document.createElement('span');
                 statusSpan.classList.add('status-badge');
                 
+                // 生成絕對網址
                 const absoluteUrl = new URL(song.file, window.location.href).href;
-                const cachedResponse = await cache.match(absoluteUrl);
-                if (cachedResponse) {
+                
+                // 預設為未下載
+                let isCached = false;
+
+                # 💡【核心改動】：檢查「所有」快取庫，只要任何一個庫有這首歌，就判定為已下載
+                for (const name of cacheNames) {
+                    const cache = await caches.open(name);
+                    const cachedResponse = await cache.match(absoluteUrl);
+                    if (cachedResponse) {
+                        isCached = true;
+                        break; // 找到了就跳出循環
+                    }
+                }
+
+                if (isCached) {
                     statusSpan.textContent = '已下載';
                     statusSpan.classList.add('downloaded');
                 } else {
@@ -272,13 +274,14 @@
             nowPlayingElem.textContent = `${song.title}`;
             
             document.querySelectorAll('#playlist li').forEach((li, idx) => {
-                if (idx === index) li.classList.add('add', 'active');
+                if (idx === index) li.classList.add('active');
                 else li.classList.remove('active');
             });
 
             updateMediaSession(song);
         }
 
+        // 當音樂開始播放時，等待 2 秒（讓 Service Worker 存完硬碟）後刷新標籤
         player.addEventListener('playing', () => {
             setTimeout(() => { initPlaylist(); }, 2000);
         });
