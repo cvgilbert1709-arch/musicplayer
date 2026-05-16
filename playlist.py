@@ -3,49 +3,39 @@ import json
 import subprocess
 
 def generate_playlist():
-    # 目前 Python 檔案所在的資料夾路徑 (C:\\Users\\cvgil\\Downloads\\my-music-pwa)
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    
-    # 定義音樂檔案實際存放的子資料夾路徑 (C:\\Users\\cvgil\\Downloads\\my-music-pwa\\song)
     song_dir = os.path.join(current_dir, 'song')
     
-    # 如果找不到 song 資料夾，自動建立一個
     if not os.path.exists(song_dir):
         os.makedirs(song_dir)
-        print(f"📁 找不到 'song' 資料夾，已為您自動建立。請把 MP3 放進：{song_dir}")
+        print(f"📁 找不到 'song' 資料夾，已自動建立。請把 MP3 放進：{song_dir}")
         return False
         
     playlist = []
+    print(f"🎵 1. 開始掃描 {song_dir} 內的所有 MP3 檔案...")
     
-    print(f"🎵 1. 開始掃描 {song_dir} 內的音樂檔案...")
-    # 掃描 song 子資料夾內的所有檔案
     for filename in os.listdir(song_dir):
         if filename.lower().endswith('.mp3'):
-            name_without_ext = os.path.splitext(filename)[0]
+            pure_name = filename[:-4] if filename.lower().endswith('.mp3') else filename
             
-            # 根據 " - " 拆分歌手與歌名
-            if " - " in name_without_ext:
-                parts = name_without_ext.split(" - ", 1)
+            if " - " in pure_name:
+                parts = pure_name.split(" - ", 1)
                 artist = parts[0].strip()
                 title = parts[1].strip()
             else:
                 artist = "未知歌手"
-                title = name_without_ext.strip()
+                title = pure_name.strip()
             
-            # 💡 【關鍵修改】：因為音樂在子資料夾，網頁讀取的相對路徑必須補上 "song/"
             song_file_path = f"song/{filename}"
             
-            song_data = {
+            playlist.append({
                 "title": title,
-                "file": song_file_path,  # 例如 "song/周傑倫 - 晴天.mp3"
+                "file": song_file_path,
                 "artist": artist
-            }
-            playlist.append(song_data)
+            })
     
-    # 按照歌名排序
     playlist.sort(key=lambda x: x['title'])
     
-    # 將 playlist.json 寫回主資料夾中
     output_path = os.path.join(current_dir, 'playlist.json')
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(playlist, f, ensure_ascii=False, indent=2)
@@ -54,31 +44,51 @@ def generate_playlist():
     return True
 
 def upload_to_github():
-    print("\n🚀 2. 開始自動上傳到 GitHub...")
+    print("\n🚀 2. 啟動一鍵同步，自動上傳至 GitHub...")
     try:
         current_dir = os.path.dirname(os.path.abspath(__file__))
         os.chdir(current_dir)
-        print(current_dir)
 
-        # 執行 git 指令（會自動包含主資料夾變更與 song 資料夾內的新歌）
-        subprocess.run(["git", "add", "."], check=True)
+        # 💡【終極硬派路徑修正】：直接指定 Windows 預設的 Git 安裝路徑（前面加 r 防止斜線出錯）
+        git_path = r"C:\Program Files\Git\cmd\git.exe"
         
-        commit_message = "🤖 Auto-updated playlist and uploaded new songs from song/ folder"
-        subprocess.run(["git", "commit", "-m", commit_message], check=True)
+        # 如果你把 Git 裝在其他非預設的地方，導致找不到，我們可以用第二路徑防呆
+        if not os.path.exists(git_path):
+            git_path = "git" # 真的找不到才退回讓系統自己猜
+
+        # 1. 自動打包檔案 (直接帶入 git_path)
+        add_result = subprocess.run(f'"{git_path}" add .', shell=True, capture_output=True, text=True, encoding='cp950', errors='ignore')
         
-        subprocess.run(["git", "push", "origin", "main"], check=True)
+        if add_result.returncode != 0:
+            print("\n🔍 【偵錯回報】Git 拒絕打包檔案！以下是 Windows Git 回傳的真實原因：")
+            print("==================================================")
+            print(add_result.stderr.strip() if add_result.stderr else "未知 Git 錯誤")
+            print("==================================================")
+            return
+
+        # 2. 檢查變更
+        status_check = subprocess.run(f'"{git_path}" status --porcelain', shell=True, capture_output=True, text=True, encoding='cp950', errors='ignore')
         
-        print("\n🎉 大功告成！所有檔案（包含 song 內的新歌）已成功上傳至 GitHub！")
+        if not status_check.stdout.strip():
+            print("\nℹ️ 檢查完畢：專案沒有任何新變更或新歌，跳過上傳。")
+            print("🎉 音樂盒目前已經是最新的版本！")
+            return
+
+        # 3. 本地提交
+        commit_message = "Automated music player update"
+        subprocess.run(f'"{git_path}" commit -m "{commit_message}"', shell=True, check=True, encoding='cp950', errors='ignore')
+        
+        # 4. 推送到 GitHub 雲端
+        subprocess.run(f'"{git_path}" push origin main', shell=True, check=True, encoding='cp950', errors='ignore')
+        
+        print("\n🎉 大功告成！新歌和歌單已直接同步上傳至 GitHub 倉庫！")
+        print("💡 提醒：GitHub Pages 需要大約 1 分鐘更新。隨後在 iPhone 上徹底關閉並重開 App 兩次即可看到新歌！")
         
     except subprocess.CalledProcessError as e:
-        print(f"\n❌ Git 上傳失敗！錯誤代碼: {e.returncode}")
-        print("請確保您這台電腦平時可以使用 git 指令直接 push 而不需要密碼。")
+        print(f"\n❌ Git 自動上傳失敗，錯誤代碼: {e.returncode}")
     except Exception as e:
         print(f"\n❌ 發生未知錯誤: {e}")
 
 if __name__ == "__main__":
-    success = generate_playlist()
-    if success and len(os.listdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'song'))) > 0:
+    if generate_playlist():
         upload_to_github()
-    else:
-        print("\n⚠️ 您的 song 資料夾內似乎沒有任何 MP3 檔案，已跳過 GitHub 上傳。")
