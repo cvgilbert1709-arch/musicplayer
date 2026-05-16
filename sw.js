@@ -1,5 +1,5 @@
 <<<<<<< HEAD
-const CACHE_NAME = 'music-player-v2'; // 如果以後你要大改網頁，可以把 v2 改成 v3
+const CACHE_NAME = 'music-player-v3'; // 如果以後你要大改網頁，可以把 v2 改成 v3
 const ASSETS = [
   'index.html',
   'manifest.json',

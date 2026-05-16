@@ -2,10 +2,10 @@
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
+    <!-- box-sizing: border-pack 確保內邊距不撐開寬度，viewport-fit=cover 允許填滿瀏海屏 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>離線音樂播放器</title>
     
-    <!-- iOS PWA 專用標籤，隱藏 Safari 網址列並允許背景播放 -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="音樂盒">
@@ -14,107 +14,184 @@
     <link rel="manifest" href="manifest.json">
 
     <style>
-        /* 深色 iOS 風格介面 */
+        /* 現代 iOS 暗黑模式風格 */
         :root {
-            --safe-top: env(safe-area-inset-top, 20px);
-            --safe-bottom: env(safe-area-inset-bottom, 20px);
+            /* 自動獲取 iOS 安全區域（避免遮擋瀏海屏與底部手勢條） */
+            --safe-top: env(safe-area-inset-top, 44px);
+            --safe-bottom: env(safe-area-inset-bottom, 34px);
         }
+        
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent; /* 移除 iOS 點擊時的藍色高亮 */
+        }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif;
             margin: 0;
-            padding: calc(var(--safe-top) + 20px) 20px calc(var(--safe-bottom) + 20px) 20px;
-            background-color: #121212;
+            padding: 0;
+            background-color: #000000; /* 使用純黑底色，完美隱藏瀏海屏 */
             color: #ffffff;
             display: flex;
             flex-direction: column;
-            height: calc(100vh - calc(var(--safe-top) + var(--safe-bottom) + 40px));
+            /* 100vh 在 iOS 上會有工具列高度計算錯誤的問題，這裡用標準高度填滿 */
+            height: 100vh; 
+            overflow: hidden; /* 防止整個網頁產生全域上下震動的橡皮筋效果 */
         }
-        h1 { font-size: 24px; margin-bottom: 20px; text-align: center; }
-        #player-container {
-            background: #1e1e1e;
-            padding: 20px;
-            border-radius: 16px;
+
+        /* 頂部導航欄（避開瀏海屏） */
+        header {
+            padding-top: var(--safe-top);
+            padding-left: 20px;
+            padding-right: 20px;
+            padding-bottom: 10px;
+            background-color: #121212;
+            border-bottom: 1px solid #262626;
+        }
+        header h1 {
+            font-size: 20px;
+            font-weight: 700;
+            margin: 0;
             text-align: center;
-            margin-bottom: 20px;
+            letter-spacing: 0.5px;
         }
-        #now-playing { font-size: 16px; color: #a0a0a0; margin-bottom: 15px; }
+
+        /* 播放器主控制面板（固定在上方） */
+        #player-container {
+            background: linear-gradient(180deg, #121212 0%, #1c1c1e 100%);
+            padding: 20px;
+            border-bottom: 1px solid #262626;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
         
-        /* 播放控制列 */
         #controls-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 10px;
+            width: 100%;
         }
+        
+        #now-playing {
+            font-size: 15px;
+            font-weight: 500;
+            color: #ff2d55; /* iOS Apple Music 經典桃紅色 */
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 65%;
+        }
+        
+        /* 播放模式按鈕 */
         .mode-btn {
-            background: #2a2a2a;
-            color: #fff;
+            background: #2c2c2e;
+            color: #ffffff;
             border: none;
-            padding: 8px 16px;
+            padding: 8px 14px;
             border-radius: 20px;
-            font-size: 14px;
+            font-size: 13px;
+            font-weight: 600;
             cursor: pointer;
-            transition: background 0.2s;
+            transition: all 0.2s ease;
         }
         .mode-btn.active {
-            background: #007aff;
+            background: #ff2d55;
         }
 
-        audio { width: 100%; margin-top: 10px; }
+        /* iOS 原生 HTML5 播放器介面優化 */
+        audio {
+            width: 100%;
+            height: 40px;
+            border-radius: 8px;
+        }
+
+        /* 歌單滾動區域（智慧型填充剩餘螢幕空間） */
+        #playlist-container {
+            flex-grow: 1;
+            overflow-y: auto; /* 只有歌單區域可以上下捲動 */
+            -webkit-overflow-scrolling: touch; /* 啟用 iOS 絲滑滾動效果 */
+            padding: 15px 20px calc(var(--safe-bottom) + 15px) 20px; /* 底部留空避開 iOS 黑條 */
+        }
+
         #playlist {
             list-style: none;
             padding: 0;
             margin: 0;
-            overflow-y: auto;
-            flex-grow: 1;
         }
+        
+        /* 歌單單一曲目項目 */
         li {
-            padding: 15px;
-            background: #2a2a2a;
-            margin-bottom: 8px;
-            border-radius: 8px;
+            padding: 16px;
+            background: #1c1c1e;
+            margin-bottom: 10px;
+            border-radius: 12px;
             cursor: pointer;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            transition: background 0.2s ease;
         }
-        li:active { background: #3a3a3a; }
-        li.active { background: #007aff; color: white; font-weight: bold; }
+        li:active {
+            background: #2c2c2e; /* 點擊時的灰化反饋 */
+        }
+        
+        /* 當前播放中的歌曲高亮 */
+        li.active {
+            background: rgba(255, 45, 85, 0.15);
+            border: 1px solid rgba(255, 45, 85, 0.4);
+        }
+        li.active span {
+            color: #ff2d55;
+            font-weight: 600;
+        }
+        
+        li span {
+            font-size: 15px;
+            color: #ffffff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 75%;
+        }
         
         /* 下載狀態標籤 */
         .status-badge {
-            font-size: 12px;
-            padding: 2px 6px;
-            border-radius: 10px;
-            background: #3a3a3a;
-            color: #aaa;
-        }
-        li.active .status-badge {
-            background: rgba(255,255,255,0.2);
-            color: #fff;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 4px 8px;
+            border-radius: 6px;
+            background: #2c2c2e;
+            color: #8e8e93;
         }
         .downloaded {
-            color: #4cd964 !important; /* iOS 系統綠色 */
+            background: rgba(52, 199, 89, 0.15); /* iOS 綠色透明底 */
+            color: #34c759 !important; /* iOS 綠色字 */
         }
     </style>
 </head>
 <body>
 
-    <h1>我的離線音樂盒</h1>
+    <!-- 頂部標題（已安全避開動態島） -->
+    <header>
+        <h1>我的離線音樂盒</h1>
+    </header>
 
+    <!-- 核心播放控制器（固定在上方，不隨歌單滾動） -->
     <div id="player-container">
         <div id="controls-row">
-            <div id="now-playing">未在播放</div>
-            <!-- 播放模式切換按鈕 -->
+            <div id="now-playing">準備就緒</div>
             <button id="mode-toggle" class="mode-btn" onclick="togglePlayMode()">🔁 順序播放</button>
         </div>
         <audio id="player" controls preload="auto"></audio>
     </div>
 
-    <ul id="playlist"></ul>
+    <!-- 可獨立滾動的歌單區域 -->
+    <div id="playlist-container">
+        <ul id="playlist"></ul>
+    </div>
 
     <script>
-        // 1. 註冊 Service Worker 處理離線檔案攔截
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('sw.js')
                 .then(() => console.log('Service Worker 註冊成功'))
@@ -123,14 +200,13 @@
 
         let songs = []; 
         let currentTrackIndex = 0;
-        let playMode = 'sequence'; // 預設為 'sequence' (順序)，可切換為 'random' (隨機)
+        let playMode = 'sequence'; 
         
         const player = document.getElementById('player');
         const playlistElem = document.getElementById('playlist');
         const nowPlayingElem = document.getElementById('now-playing');
         const modeToggleBtn = document.getElementById('mode-toggle');
 
-        // 2. 從 Python 生成的 JSON 檔案動態載入歌單
         fetch('playlist.json')
             .then(res => res.json())
             .then(data => {
@@ -142,11 +218,8 @@
                 console.error(err);
             });
 
-        // 3. 初始化並渲染播放清單（包含智慧化下載狀態檢查）
         async function initPlaylist() {
             playlistElem.innerHTML = '';
-            
-            // 開啟 Service Worker 的快取資料庫（名稱必須與 sw.js 完全對齊）
             const cache = await caches.open('music-player-v2');
 
             for (let index = 0; index < songs.length; index++) {
@@ -154,26 +227,20 @@
                 const li = document.createElement('li');
                 li.dataset.index = index;
                 
-                // 顯示：歌名 - 歌手
                 const textSpan = document.createElement('span');
                 textSpan.textContent = `${song.title} - ${song.artist}`;
                 li.appendChild(textSpan);
 
-                // 下載狀態標籤
                 const statusSpan = document.createElement('span');
                 statusSpan.classList.add('status-badge');
                 
-                // 💡【核心修正機制】：將相對路徑 "song/xxx.mp3" 轉換成具備網域的完整 URL 物件
-                // 這樣才能 100% 精準與 Service Worker 儲存的絕對網址成功對齊
                 const absoluteUrl = new URL(song.file, window.location.href).href;
-                
-                // 比對資料庫中是否存在此音樂檔案
                 const cachedResponse = await cache.match(absoluteUrl);
                 if (cachedResponse) {
-                    statusSpan.textContent = '🟢 已下載';
+                    statusSpan.textContent = '已下載';
                     statusSpan.classList.add('downloaded');
                 } else {
-                    statusSpan.textContent = '⏳ 未下載';
+                    statusSpan.textContent = '未下載';
                 }
                 li.appendChild(statusSpan);
 
@@ -182,7 +249,6 @@
             }
         }
 
-        // 4. 切換播放模式（順序 / 隨機）
         function togglePlayMode() {
             if (playMode === 'sequence') {
                 playMode = 'random';
@@ -195,36 +261,28 @@
             }
         }
 
-        // 5. 播放音樂核心邏輯
         function playTrack(index) {
             if (index < 0 || index >= songs.length) return;
             currentTrackIndex = index;
             const song = songs[currentTrackIndex];
 
             player.src = song.file;
-            player.play().catch(err => console.log("等待手動播放觸發:", err));
+            player.play().catch(err => console.log("等待點擊播放:", err));
 
-            nowPlayingElem.textContent = `正在播放: ${song.title}`;
+            nowPlayingElem.textContent = `${song.title}`;
             
-            // 更新畫面的高亮顯示
             document.querySelectorAll('#playlist li').forEach((li, idx) => {
-                if (idx === index) li.classList.add('active');
+                if (idx === index) li.classList.add('add', 'active');
                 else li.classList.remove('active');
             });
 
-            // 連動更新 iOS 鎖定畫面控制面板
             updateMediaSession(song);
         }
 
-        // 6. 音樂播放時，即時更新「已下載」綠色標籤
         player.addEventListener('playing', () => {
-            // 音樂播放 2 秒後（此時 Service Worker 肯定已將檔案完整下載並存入快取），刷新 UI 清單狀態
-            setTimeout(() => {
-                initPlaylist(); 
-            }, 2000);
+            setTimeout(() => { initPlaylist(); }, 2000);
         });
 
-        // 7. 串接 iOS Media Session API (支援背景播放與鎖定面板控制)
         function updateMediaSession(song) {
             if ('mediaSession' in navigator) {
                 navigator.mediaSession.metadata = new MediaMetadata({
@@ -234,7 +292,6 @@
                     artwork: [{ src: 'icon.png', sizes: '512x512', type: 'image/png' }]
                 });
 
-                // 綁定 iOS 控制中心的按鈕（包含鎖定畫面、耳機線控、智慧手錶）
                 navigator.mediaSession.setActionHandler('play', () => player.play());
                 navigator.mediaSession.setActionHandler('pause', () => player.pause());
                 navigator.mediaSession.setActionHandler('previoustrack', () => handleNextOrPrev('prev'));
@@ -242,31 +299,27 @@
             }
         }
 
-        // 8. 統一處理下一首/上一首的切換邏輯（完美融合隨機與順序模式）
         function handleNextOrPrev(direction) {
             if (playMode === 'random') {
-                // 隨機模式：從歌單中任意抽選一首
                 const randomIndex = Math.floor(Math.random() * songs.length);
                 playTrack(randomIndex);
             } else {
-                // 順序模式
                 if (direction === 'next') {
                     if (currentTrackIndex + 1 < songs.length) {
                         playTrack(currentTrackIndex + 1);
                     } else {
-                        playTrack(0); // 播完最後一首則回到第一首
+                        playTrack(0);
                     }
                 } else {
                     if (currentTrackIndex - 1 >= 0) {
                         playTrack(currentTrackIndex - 1);
                     } else {
-                        playTrack(songs.length - 1); // 退回到最後一首
+                        playTrack(songs.length - 1);
                     }
                 }
             }
         }
 
-        // 9. 自動續播邏輯：當歌曲播放完畢，自動切換至下一首
         player.addEventListener('ended', () => {
             handleNextOrPrev('next');
         });
