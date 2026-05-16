@@ -192,6 +192,7 @@
         const nowPlayingElem = document.getElementById('now-playing');
         const modeToggleBtn = document.getElementById('mode-toggle');
 
+        // 智慧化快取讀取
         fetch('playlist.json')
             .then(res => res.json())
             .then(data => {
@@ -203,12 +204,18 @@
                 console.error(err);
             });
 
-        // 🧠【智慧化下載偵測】：遍歷手機內所有快取庫，100% 解決名稱打架問題
+        // 💡【已完全刪除內部的 Python 註釋錯誤，確保主畫面不崩潰】
         async function initPlaylist() {
             playlistElem.innerHTML = '';
             
-            // 取得目前手機裡存在的所有快取資料庫名稱
-            const cacheNames = await caches.keys();
+            let cacheNames = [];
+            try {
+                if (window.caches) {
+                    cacheNames = await caches.keys();
+                }
+            } catch (e) {
+                console.log("無法獲取快取庫:", e);
+            }
 
             for (let index = 0; index < songs.length; index++) {
                 const song = songs[index];
@@ -222,19 +229,20 @@
                 const statusSpan = document.createElement('span');
                 statusSpan.classList.add('status-badge');
                 
-                // 生成絕對網址
                 const absoluteUrl = new URL(song.file, window.location.href).href;
-                
-                // 預設為未下載
                 let isCached = false;
 
-                # 💡【核心改動】：檢查「所有」快取庫，只要任何一個庫有這首歌，就判定為已下載
+                // 智慧比對所有快取庫
                 for (const name of cacheNames) {
-                    const cache = await caches.open(name);
-                    const cachedResponse = await cache.match(absoluteUrl);
-                    if (cachedResponse) {
-                        isCached = true;
-                        break; // 找到了就跳出循環
+                    try {
+                        const cache = await caches.open(name);
+                        const cachedResponse = await cache.match(absoluteUrl);
+                        if (cachedResponse) {
+                            isCached = true;
+                            break;
+                        }
+                    } catch (err) {
+                        // 忽略單個快取庫讀取失敗
                     }
                 }
 
@@ -281,7 +289,6 @@
             updateMediaSession(song);
         }
 
-        // 當音樂開始播放時，等待 2 秒（讓 Service Worker 存完硬碟）後刷新標籤
         player.addEventListener('playing', () => {
             setTimeout(() => { initPlaylist(); }, 2000);
         });
