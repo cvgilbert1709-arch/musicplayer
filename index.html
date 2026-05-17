@@ -188,6 +188,26 @@
             text-overflow: ellipsis;
             white-space: nowrap;
         }
+
+        #search-container {
+            padding: 10px 20px;
+            background: #121212;
+            border-bottom: 1px solid #262626;
+        }
+        #search-input {
+            width: 100%;
+            background: #2c2c2e;
+            border: none;
+            border-radius: 10px;
+            padding: 9px 14px;
+            font-size: 15px;
+            color: #ffffff;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        #search-input::placeholder {
+            color: #636366;
+        }
     </style>
 </head>
 <body>
@@ -206,6 +226,10 @@
             <button id="download-btn" class="download-all-btn" onclick="downloadAllSongs()">⬇️ 下載全部離線</button>
             <span id="download-status">首次需在有網路時下載</span>
         </div>
+    </div>
+
+    <div id="search-container">
+        <input id="search-input" type="search" placeholder="🔍 搜尋歌名、歌手..." oninput="filterPlaylist(this.value)">
     </div>
 
     <div id="playlist-container">
@@ -287,6 +311,18 @@
                 li.onclick = () => playTrack(index);
                 playlistElem.appendChild(li);
             }
+        }
+
+        function filterPlaylist(query) {
+            const q = query.trim().toLowerCase();
+            document.querySelectorAll('#playlist li').forEach((li) => {
+                const index = parseInt(li.dataset.index);
+                const song = songs[index];
+                const match = !q ||
+                    song.title.toLowerCase().includes(q) ||
+                    song.artist.toLowerCase().includes(q);
+                li.style.display = match ? '' : 'none';
+            });
         }
 
         function togglePlayMode() {
