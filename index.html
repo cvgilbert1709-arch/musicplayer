@@ -121,21 +121,23 @@
             justify-content: space-between;
             align-items: center;
             transition: background 0.2s ease;
+            border: 1px solid transparent;
         }
         li:active {
             background: #2c2c2e;
         }
         
+        /* 正在播放的歌曲保持紅色高亮 */
         li.active {
-            background: rgba(255, 45, 85, 0.15);
-            border: 1px solid rgba(255, 45, 85, 0.4);
+            background: rgba(255, 45, 85, 0.15) !important;
+            border: 1px solid rgba(255, 45, 85, 0.4) !important;
         }
-        li.active span {
-            color: #ff2d55;
+        li.active span.song-text {
+            color: #ff2d55 !important;
             font-weight: 600;
         }
         
-        li span {
+        li span.song-text {
             font-size: 15px;
             color: #ffffff;
             white-space: nowrap;
@@ -184,7 +186,7 @@
         }
 
         let songs = []; 
-        let currentTrackIndex = 0;
+        let currentTrackIndex = -1; // 預設改為 -1，代表一開始沒人在放
         let playMode = 'sequence'; 
         
         const player = document.getElementById('player');
@@ -192,7 +194,6 @@
         const nowPlayingElem = document.getElementById('now-playing');
         const modeToggleBtn = document.getElementById('mode-toggle');
 
-        // 智慧化快取讀取
         fetch('playlist.json')
             .then(res => res.json())
             .then(data => {
@@ -204,25 +205,22 @@
                 console.error(err);
             });
 
-        // 💡【已完全刪除內部的 Python 註釋錯誤，確保主畫面不崩潰】
+        // 🧠【終極修正】：全域直接比對，並且在重新渲染時鎖定當前播放曲目的紅色高亮
         async function initPlaylist() {
             playlistElem.innerHTML = '';
             
-            let cacheNames = [];
-            try {
-                if (window.caches) {
-                    cacheNames = await caches.keys();
-                }
-            } catch (e) {
-                console.log("無法獲取快取庫:", e);
-            }
-
             for (let index = 0; index < songs.length; index++) {
                 const song = songs[index];
                 const li = document.createElement('li');
                 li.dataset.index = index;
                 
+                // 💡【重要修正】：如果是當前正在放的歌，重新渲染時立刻補上 active 標籤，防止紅色 flash 消失！
+                if (index === currentTrackIndex) {
+                    li.classList.add('active');
+                }
+                
                 const textSpan = document.createElement('span');
+                textSpan.classList.add('song-text');
                 textSpan.textContent = `${song.title} - ${song.artist}`;
                 li.appendChild(textSpan);
 
@@ -232,18 +230,16 @@
                 const absoluteUrl = new URL(song.file, window.location.href).href;
                 let isCached = false;
 
-                // 智慧比對所有快取庫
-                for (const name of cacheNames) {
-                    try {
-                        const cache = await caches.open(name);
-                        const cachedResponse = await cache.match(absoluteUrl);
+                // 💡【最安全比對】：直接免去名稱迴圈，使用全域環境判斷該網址是否被任意快取庫捕獲
+                try {
+                    if (window.caches) {
+                        const cachedResponse = await caches.match(absoluteUrl);
                         if (cachedResponse) {
                             isCached = true;
-                            break;
                         }
-                    } catch (err) {
-                        // 忽略單個快取庫讀取失敗
                     }
+                } catch (e) {
+                    console.log(e);
                 }
 
                 if (isCached) {
@@ -273,7 +269,7 @@
 
         function playTrack(index) {
             if (index < 0 || index >= songs.length) return;
-            currentTrackIndex = index;
+            currentTrackIndex = index; // 記住當前播放的索引
             const song = songs[currentTrackIndex];
 
             player.src = song.file;
@@ -281,6 +277,7 @@
 
             nowPlayingElem.textContent = `${song.title}`;
             
+            // 立即更新一次高亮
             document.querySelectorAll('#playlist li').forEach((li, idx) => {
                 if (idx === index) li.classList.add('active');
                 else li.classList.remove('active');
@@ -289,6 +286,7 @@
             updateMediaSession(song);
         }
 
+        // 當音樂開始播放時，等待 2 秒刷新標籤狀態
         player.addEventListener('playing', () => {
             setTimeout(() => { initPlaylist(); }, 2000);
         });
