@@ -228,7 +228,7 @@
         const nowPlayingElem = document.getElementById('now-playing');
         const modeToggleBtn = document.getElementById('mode-toggle');
 
-        fetch('playlist.json')
+        fetch('playlist.json?v=' + Date.now())
             .then(res => res.json())
             .then(data => {
                 songs = data;
