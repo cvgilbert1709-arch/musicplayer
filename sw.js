@@ -1,5 +1,5 @@
 // 💡【核心改動】：我們將資料庫拆分為「網頁架構」與「音樂實體」兩個獨立的空間
-const UI_CACHE_NAME = 'music-ui-v4';         // 👈 以後你修改網頁介面，只需將這裡改為 v5、v6
+const UI_CACHE_NAME = 'music-ui-v5';         // 👈 每次修改網頁介面時，遞增這個數字
 const MEDIA_CACHE_NAME = 'music-media-files'; // 👈 這個名字永遠不要動！裡面的歌就不會被刪除
 
 // 網頁基礎 UI 檔案（不含 playlist.json，讓它每次都優先從網路取得最新歌單）
@@ -36,6 +36,11 @@ self.addEventListener('activate', (event) => {
       );
     }).then(() => {
       return self.clients.claim();
+    }).then(() => {
+      // 新版 SW 接管後，強制所有頁面重新載入，確保立即看到最新歌單
+      return self.clients.matchAll({ type: 'window' }).then(clients => {
+        clients.forEach(client => client.navigate(client.url));
+      });
     })
   );
 });
