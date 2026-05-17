@@ -28,7 +28,7 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cache) => {
-          # 💡【最關鍵的安全閥】：只有當舊快取的名字不等於當前最新 UI 名稱，且不是音樂媒體庫時，才允許刪除
+          // 💡【最關鍵的安全閥】：只有當舊快取的名字不等於當前最新 UI 名稱，且不是音樂媒體庫時，才允許刪除
           if (cache !== UI_CACHE_NAME && cache !== MEDIA_CACHE_NAME) {
             console.log(' [Service Worker] 只清理舊網頁 UI 快取:', cache);
             return caches.delete(cache);
