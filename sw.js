@@ -2,11 +2,10 @@
 const UI_CACHE_NAME = 'music-ui-v4';         // 👈 以後你修改網頁介面，只需將這裡改為 v5、v6
 const MEDIA_CACHE_NAME = 'music-media-files'; // 👈 這個名字永遠不要動！裡面的歌就不會被刪除
 
-// 網頁基礎 UI 檔案
+// 網頁基礎 UI 檔案（不含 playlist.json，讓它每次都優先從網路取得最新歌單）
 const BASE_ASSETS = [
   'index.html',
   'manifest.json',
-  'playlist.json',
   'icon.png'
 ];
 
@@ -45,8 +44,22 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = event.request.url;
 
+  // 📋 處理歌單檔案：永遠優先從網路取得最新版本，離線時才用快取
+  if (url.includes('playlist.json')) {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response.status === 200) {
+            caches.open(UI_CACHE_NAME).then(cache => cache.put(event.request, response.clone()));
+          }
+          return response;
+        })
+        .catch(() => caches.match(event.request))
+    );
+  }
+
   // 🎵 處理音樂檔案 (.mp3)
-  if (url.includes('.mp3')) {
+  else if (url.includes('.mp3')) {
     event.respondWith(
       // 💡 統一去永久不滅的音樂保險箱（MEDIA_CACHE_NAME）裡找歌
       caches.open(MEDIA_CACHE_NAME).then((cache) => {
@@ -67,8 +80,8 @@ self.addEventListener('fetch', (event) => {
         });
       })
     );
-  } 
-  // 📝 處理播放清單或基礎網頁檔案
+  }
+  // 📝 處理基礎網頁檔案
   else {
     event.respondWith(
       caches.match(event.request).then((response) => {

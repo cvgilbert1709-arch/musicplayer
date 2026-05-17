@@ -375,12 +375,32 @@
             const statusElem = document.getElementById('download-status');
             btn.disabled = true;
 
+            // 先找出哪些歌還沒下載
+            statusElem.textContent = '正在檢查已下載歌曲...';
+            const toDownload = [];
+            for (const song of songs) {
+                const absoluteUrl = new URL(song.file, window.location.href).href;
+                let isCached = false;
+                try {
+                    if (window.caches) isCached = !!(await caches.match(absoluteUrl));
+                } catch (e) {}
+                if (!isCached) toDownload.push(song);
+            }
+
+            if (toDownload.length === 0) {
+                btn.textContent = '✅ 已全部下載';
+                statusElem.textContent = `全部 ${songs.length} 首皆已儲存，可離線播放！`;
+                statusElem.style.color = '#34c759';
+                return;
+            }
+
             let downloaded = 0;
             let failed = 0;
 
-            for (let i = 0; i < songs.length; i++) {
-                const song = songs[i];
-                statusElem.textContent = `正在下載 ${i + 1}/${songs.length}：${song.title}`;
+            for (let i = 0; i < toDownload.length; i++) {
+                const song = toDownload[i];
+                statusElem.textContent = `正在下載新歌 ${i + 1}/${toDownload.length}：${song.title}`;
+                statusElem.style.color = '#8e8e93';
                 try {
                     const response = await fetch(song.file);
                     if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -394,7 +414,7 @@
 
             if (failed === 0) {
                 btn.textContent = '✅ 已全部下載';
-                statusElem.textContent = `全部 ${downloaded} 首已儲存，現在可離線播放！`;
+                statusElem.textContent = `新增 ${downloaded} 首完成，共 ${songs.length} 首可離線播放！`;
                 statusElem.style.color = '#34c759';
             } else {
                 btn.disabled = false;
