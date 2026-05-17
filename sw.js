@@ -1,115 +1,83 @@
-<<<<<<< HEAD
-const CACHE_NAME = 'music-player-v3'; // 如果以後你要大改網頁，可以把 v2 改成 v3
-const ASSETS = [
+// 每次修改 sw.js 內容時，改動這個版本號（如 v2 改成 v3），iPhone 就會立刻強制刷新
+const CACHE_NAME = 'music-player-v3';
+
+// 網頁啟動時就必須立刻強制寫入硬碟的基礎 UI 檔案
+const BASE_ASSETS = [
   'index.html',
   'manifest.json',
-  'playlist.json', // 記得快取設定檔
+  'playlist.json',
   'icon.png'
 ];
 
-// 1. 安裝：快取核心 UI 檔案
+// 1. 安裝階段：立刻下載並保存基礎網頁檔案
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS);
+      console.log(' [Service Worker] 正在快取基礎網頁架構...');
+      return cache.addAll(BASE_ASSETS);
+    }).then(() => {
+      // 讓新版 Service Worker 安裝後立刻跳過等待，直接接管網頁
+      return self.skipWaiting();
     })
   );
 });
 
-// 2. 激活：清除舊快取
+// 2. 激活階段：徹底清除舊版本的快取，釋放手機空間
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cache) => {
           if (cache !== CACHE_NAME) {
+            console.log(' [Service Worker] 正在清除舊快取:', cache);
             return caches.delete(cache);
           }
         })
       );
+    }).then(() => {
+      // 確保激活後立刻控制所有開啟的網頁分頁
+      return self.clients.claim();
     })
   );
 });
 
-// 3. 攔截請求：自動快取音樂 MP3 檔案
+// 3. 核心攔截階段：智慧型下載並保存音樂 MP3 檔案
 self.addEventListener('fetch', (event) => {
-  event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      // 如果手機本來就有快取，直接從硬碟讀取
-      if (cachedResponse) {
-        return cachedResponse;
-      }
+  const url = event.request.url;
 
-      // 如果手機沒有，則去網路抓取
-      return fetch(event.request).then((response) => {
-        // 檢查是不是音樂檔（.mp3）或者是更新後的 playlist.json
-        if (event.request.url.includes('.mp3') || event.request.url.includes('playlist.json')) {
-          let responseClone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            // 自動把這首新歌存入 iPhone 本地快取，下次離線就能聽
-            cache.put(event.request, responseClone);
-          });
+  // 💡【核心修正】：只要發現請求是 MP3 音樂檔案，或是歌單 JSON
+  if (url.includes('.mp3') || url.includes('playlist.json')) {
+    event.respondWith(
+      caches.match(event.request).then((cachedResponse) => {
+        // 如果手機硬碟裡本來就有這首歌，100% 直接從本地讀取（免流量）
+        if (cachedResponse) {
+          return cachedResponse;
         }
-        return response;
-      });
-    })
-  );
-});
-=======
-const CACHE_NAME = 'music-player-v2'; // 如果以後你要大改網頁，可以把 v2 改成 v3
-const ASSETS = [
-  'index.html',
-  'manifest.json',
-  'playlist.json', // 記得快取設定檔
-  'icon.png'
-];
 
-// 1. 安裝：快取核心 UI 檔案
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS);
-    })
-  );
-});
-
-// 2. 激活：清除舊快取
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cache) => {
-          if (cache !== CACHE_NAME) {
-            return caches.delete(cache);
+        // 如果手機本地沒有，則立刻聯網下載
+        return fetch(event.request).then((response) => {
+          // 💡【iOS 關鍵相容性修復】：
+          // 必須確保網路請求成功（status 200）。iOS 在播背景音樂時有時會發送 status 206 (部分內容請求)，
+          // 我們只把標準成功的 200 實體音樂檔案強行寫入快取硬碟。
+          if (response.status === 200) {
+            let responseClone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              console.log(' [Service Worker] 成功將音樂存入手機硬碟:', url);
+              cache.put(event.request, responseClone);
+            });
           }
-        })
-      );
-    })
-  );
+          return response;
+        }).catch((err) => {
+          print(' [Service Worker] 聯網抓取音樂失敗（可能目前處於離線狀態）');
+        });
+      })
+    );
+  } else {
+    // 其他普通網頁檔案（如圖片、HTML）的標準快取策略：本地優先，沒有才走網路
+    event.respondWith(
+      caches.match(event.request).then((response) => {
+        return response || fetch(event.request);
+      })
+    );
+  }
 });
-
-// 3. 攔截請求：自動快取音樂 MP3 檔案
-self.addEventListener('fetch', (event) => {
-  event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      // 如果手機本來就有快取，直接從硬碟讀取
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-
-      // 如果手機沒有，則去網路抓取
-      return fetch(event.request).then((response) => {
-        // 檢查是不是音樂檔（.mp3）或者是更新後的 playlist.json
-        if (event.request.url.includes('.mp3') || event.request.url.includes('playlist.json')) {
-          let responseClone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            // 自動把這首新歌存入 iPhone 本地快取，下次離線就能聽
-            cache.put(event.request, responseClone);
-          });
-        }
-        return response;
-      });
-    })
-  );
-});
->>>>>>> 6757a58cd9e7bccfed04027a4d22d1a43feb4825
