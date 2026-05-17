@@ -158,6 +158,36 @@
             background: rgba(52, 199, 89, 0.15);
             color: #34c759 !important;
         }
+
+        #download-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .download-all-btn {
+            background: #0a84ff;
+            color: #ffffff;
+            border: none;
+            padding: 8px 14px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+        .download-all-btn:disabled {
+            background: #3a3a3c;
+            color: #8e8e93;
+            cursor: default;
+        }
+        #download-status {
+            font-size: 13px;
+            color: #8e8e93;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
     </style>
 </head>
 <body>
@@ -172,6 +202,10 @@
             <button id="mode-toggle" class="mode-btn" onclick="togglePlayMode()">🔁 順序播放</button>
         </div>
         <audio id="player" controls preload="auto"></audio>
+        <div id="download-row">
+            <button id="download-btn" class="download-all-btn" onclick="downloadAllSongs()">⬇️ 下載全部離線</button>
+            <span id="download-status">首次需在有網路時下載</span>
+        </div>
     </div>
 
     <div id="playlist-container">
@@ -331,6 +365,46 @@
         player.addEventListener('ended', () => {
             handleNextOrPrev('next');
         });
+
+        async function downloadAllSongs() {
+            if (songs.length === 0) {
+                alert('歌單尚未載入，請稍後再試。');
+                return;
+            }
+            const btn = document.getElementById('download-btn');
+            const statusElem = document.getElementById('download-status');
+            btn.disabled = true;
+
+            let downloaded = 0;
+            let failed = 0;
+
+            for (let i = 0; i < songs.length; i++) {
+                const song = songs[i];
+                statusElem.textContent = `正在下載 ${i + 1}/${songs.length}：${song.title}`;
+                try {
+                    const response = await fetch(song.file);
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    await response.blob(); // 確保完整下載，Service Worker 會同步存入快取
+                    downloaded++;
+                } catch (e) {
+                    console.error(`下載失敗：${song.title}`, e);
+                    failed++;
+                }
+            }
+
+            if (failed === 0) {
+                btn.textContent = '✅ 已全部下載';
+                statusElem.textContent = `全部 ${downloaded} 首已儲存，現在可離線播放！`;
+                statusElem.style.color = '#34c759';
+            } else {
+                btn.disabled = false;
+                btn.textContent = '⬇️ 重新嘗試';
+                statusElem.textContent = `✅ ${downloaded} 首成功，❌ ${failed} 首失敗`;
+                statusElem.style.color = '#ff9f0a';
+            }
+
+            initPlaylist(); // 刷新已下載標籤
+        }
     </script>
 </body>
 </html>
