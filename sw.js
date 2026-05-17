@@ -1,5 +1,5 @@
 // 💡【核心改動】：我們將資料庫拆分為「網頁架構」與「音樂實體」兩個獨立的空間
-const UI_CACHE_NAME = 'music-ui-v5';         // 👈 每次修改網頁介面時，遞增這個數字
+const UI_CACHE_NAME = 'music-ui-v6';         // 👈 每次修改網頁介面時，遞增這個數字
 const MEDIA_CACHE_NAME = 'music-media-files'; // 👈 這個名字永遠不要動！裡面的歌就不會被刪除
 
 // 網頁基礎 UI 檔案（不含 playlist.json，讓它每次都優先從網路取得最新歌單）
@@ -36,11 +36,6 @@ self.addEventListener('activate', (event) => {
       );
     }).then(() => {
       return self.clients.claim();
-    }).then(() => {
-      // 新版 SW 接管後，強制所有頁面重新載入，確保立即看到最新歌單
-      return self.clients.matchAll({ type: 'window' }).then(clients => {
-        clients.forEach(client => client.navigate(client.url));
-      });
     })
   );
 });
@@ -88,10 +83,25 @@ self.addEventListener('fetch', (event) => {
   }
   // 📝 處理基礎網頁檔案
   else {
-    event.respondWith(
-      caches.match(event.request).then((response) => {
-        return response || fetch(event.request);
-      })
-    );
+    // index.html 使用網路優先，確保每次有網路時都拿到最新版本
+    if (url.endsWith('/') || url.includes('index.html')) {
+      event.respondWith(
+        fetch(event.request)
+          .then((response) => {
+            if (response.status === 200) {
+              caches.open(UI_CACHE_NAME).then(cache => cache.put(event.request, response.clone()));
+            }
+            return response;
+          })
+          .catch(() => caches.match(event.request))
+      );
+    } else {
+      // manifest.json, icon.png 等靜態資源用快取優先
+      event.respondWith(
+        caches.match(event.request).then((response) => {
+          return response || fetch(event.request);
+        })
+      );
+    }
   }
 });
